@@ -1,4 +1,4 @@
-from __future__ import division
+
 from collections import defaultdict
 from math import pi, degrees, radians, atan2, sqrt, log, acos
 from random import (uniform,
@@ -8,7 +8,7 @@ from string import (ascii_lowercase,
                     ascii_letters,
                     digits,
                    )
-from itertools import tee, izip, product, combinations_with_replacement
+from itertools import tee, product, combinations_with_replacement
 import numpy as np
 from scipy import ndimage as ndi
 from scipy.misc import imread
@@ -366,7 +366,7 @@ class Plate(object):
         basin_rfs = (None if basin_rfs_feature is None
                      else self.feature_stash[basin_rfs_feature])
         if basin_centroids is not None:
-            for Label, centroid in basin_centroids.iteritems():
+            for Label, centroid in basin_centroids.items():
                 x, y = centroid
                 if display_labels:
                     display_text = str(Label) + "; "
@@ -518,7 +518,7 @@ class Plate(object):
         """
         a, b = tee(iterable)
         next(b, None)
-        return izip(a, b)
+        return zip(a, b)
 
     def find_notches(self,
                      tag_in,
@@ -577,7 +577,7 @@ class Plate(object):
                                       "letters in the English alphabet.")
         basin_centroids = self.feature_stash[basin_centroids_feature]
         lane_assignments = {}
-        for Label, centroid in basin_centroids.iteritems():
+        for Label, centroid in basin_centroids.items():
             x, y = centroid
             for i, (llane, rlane) in enumerate(Plate.pairwise(lanes)):
                 if llane <= y < rlane:
@@ -675,7 +675,7 @@ class Plate(object):
         baseline = self.feature_stash[baseline_feature]
         solvent_front = self.feature_stash[solvent_front_feature]
         basin_rfs = {}
-        for Label, centroid in basin_centroids.iteritems():
+        for Label, centroid in basin_centroids.items():
             distance_to_base = Plate.point_line_distance(point=centroid[::-1],
                                                          line=baseline,
                                                         )
@@ -1068,13 +1068,13 @@ class Plate(object):
             WR_unique = tuple(np.unique(WR_labels))
             smallest_WR_label = min(WR_unique)
             largest_WR_label = max(WR_unique)
-            print("WR_labels: " + str(smallest_WR_label) + " through "
-                  + str(largest_WR_label))
+            print(("WR_labels: " + str(smallest_WR_label) + " through "
+                  + str(largest_WR_label)))
         if debug_output:
             pixel_values = R.flatten().tolist()
             plot_target = pixel_values
             obn = 1000
-            print("obn = " + str(obn))
+            print(("obn = " + str(obn)))
             hist, bins = np.histogram(a=plot_target, bins=obn)
             traces = [graph_objs.Scatter(x=bins, y=hist)]
             layout = graph_objs.Layout(plot_bgcolor='rgba(0,0,0,0)',
@@ -1210,7 +1210,7 @@ class Plate(object):
                                               )
                 if intensity < min_intensity:
                     if debug_output:
-                        print("intensity = " + str(intensity))
+                        print(("intensity = " + str(intensity)))
                     delete_labels.add(rp.label)
         O, Z = Plate.make_bT_bF(image=overlaid_labels, dtype=np.int)
         for L in list(delete_labels):
@@ -1356,8 +1356,8 @@ class Plate(object):
         lines = self.feature_stash[lines_feature]
         line_angles = {line: Plate.standard_line_angle(line=line)
                        for line in lines}
-        median_line_angle = np.median(line_angles.values())
-        filtered_lines = [line for line, angle in line_angles.iteritems()
+        median_line_angle = np.median(list(line_angles.values()))
+        filtered_lines = [line for line, angle in line_angles.items()
                           if abs(angle - median_line_angle) <= angle_tolerance]
         lines_boolean = np.zeros_like(image, dtype=np.bool)
         for line in filtered_lines:
@@ -1389,15 +1389,15 @@ class Plate(object):
                 continue
             coord_dict[L].append((h, w))
         distance_dict = {}
-        for L, coords in coord_dict.iteritems():
+        for L, coords in coord_dict.items():
             distances = Plate.all_pairwise_distances(points=coords)
-            (p1, p2), largest_distance = max(distances.items(),
+            (p1, p2), largest_distance = max(list(distances.items()),
                                              key=lambda x:x[1])
             p1, p2 = p1[::-1], p2[::-1]
             distance_dict[L] = (p1, p2, largest_distance)
         bundled_lines = [Plate.extend_line(line=(p1, p2), image=image)
                          for L, (p1, p2, largest_distance)
-                         in distance_dict.iteritems()]
+                         in distance_dict.items()]
         self.feature_stash[feature_out] = tuple(bundled_lines)
         return None, self.feature_stash[feature_out]
 
@@ -1551,7 +1551,7 @@ class Plate(object):
     @staticmethod
     def points_colinear(points, error_tolerance=10**-5):
         points = sorted(points, key=lambda x:x[0])
-        h_coordinates, w_coordinates = zip(*points)
+        h_coordinates, w_coordinates = list(zip(*points))
         #Special cases: two ponits, vertical or horizontal line
         if len(points) == 2:
             colinear = True
@@ -1609,7 +1609,7 @@ class Plate(object):
         #Make all unit vectors representing all possible grid angles
         thetas = np.deg2rad(np.arange(0, 180))
         sin_cache, cos_cache = np.sin(thetas), np.cos(thetas)
-        unit_vectors = zip(cos_cache, sin_cache)
+        unit_vectors = list(zip(cos_cache, sin_cache))
         perpendicular_unit_vectors = [(unit_vectors[i], unit_vectors[i + 90])
                                       for i in range(90)]
         #Calculate largest distance between two points
@@ -1706,7 +1706,7 @@ class Plate(object):
 
     @staticmethod
     def bounding_hypercube(points):
-        X = zip(*points)
+        X = list(zip(*points))
         minmax_pairs = tuple([(min(coordinates), max(coordinates))
                               for coordinates in X])
         return minmax_pairs
@@ -1715,11 +1715,11 @@ class Plate(object):
     def Wk(clustered_points):
         sums_of_pairwise_distances = {cluster: sum(pdist(points))
                                       for cluster, points
-                                      in clustered_points.iteritems()}
+                                      in clustered_points.items()}
         cluster_sizes = {cluster: len(points)
-                         for cluster, points in clustered_points.iteritems()}
+                         for cluster, points in clustered_points.items()}
         return sum([Dr / (2.0 * cluster_sizes[cluster])
-                    for cluster, Dr in sums_of_pairwise_distances.iteritems()])
+                    for cluster, Dr in sums_of_pairwise_distances.items()])
 
     @staticmethod
     def fit_predict_dict(kmeans_assignments,
@@ -1749,11 +1749,11 @@ class Plate(object):
         (2001): 411-423. DOI: 10.1111/1467-9868.00293
         """
         data_Wk = Plate.Wk(clustered_points=clustered_points)
-        all_points = sum(clustered_points.values(), [])
+        all_points = sum(list(clustered_points.values()), [])
         minmax_pairs = Plate.bounding_hypercube(all_points)
         num_points = sum([len(points)
                           for cluster, points
-                          in clustered_points.iteritems()])
+                          in clustered_points.items()])
         ref_kmeans = KMeans(n_clusters=len(clustered_points))
         ref_log_Wks = []
         for d in range(num_ref_datasets):
@@ -1789,13 +1789,13 @@ class Plate(object):
         Engineers, Part C: Journal of Mechanical Engineering Science 219.1
         (2005): 103-119. DOI: 10.1243/095440605X8298
         """
-        num_dimensions = len(next(clustered_points.itervalues())[0])
+        num_dimensions = len(next(iter(clustered_points.values()))[0])
         if num_dimensions < 2:
             raise ValueError("Metric not defined in spaces with less than 2 "
                              "dimensions.")
         distortions = {cluster: sum([euclidean(center, point)**2
                                      for point in clustered_points[cluster]])
-                       for cluster, center in cluster_centers.iteritems()}
+                       for cluster, center in cluster_centers.items()}
         S_k = sum(distortions.values())
         k = len(clustered_points)
         if k == 1:
@@ -1837,12 +1837,12 @@ class Plate(object):
                 #sum of squared deviations from cluster means
                 sdcm = np.sum([euclidean(pts, cluster_centers[cluster])**2
                                for cluster, pts
-                               in clustered_points.iteritems()
+                               in clustered_points.items()
                                for pt in pts])
                 #sum of squared deviations from data mean
                 sdam = np.sum([euclidean(pt, all_points_mean)**2
                                for cluster, pts
-                               in clustered_points.iteritems()
+                               in clustered_points.items()
                                for pt in pts])
                 gvf = (sdam - sdcm) / sdam
                 gvfs.append(gvf)
@@ -1913,7 +1913,7 @@ class Plate(object):
                         for sorted_index, (original_index, item)
                         in enumerate(sorted_enumeration)}
         if inverse:
-            sort_mapping = {v: k for k, v in sort_mapping.iteritems()}
+            sort_mapping = {v: k for k, v in sort_mapping.items()}
         return sort_mapping
 
     def assign_grid(self,
@@ -1922,13 +1922,13 @@ class Plate(object):
                     **kwargs
                    ):
         centroids = self.feature_stash[centroids_feature]
-        centroid_indexes, centroid_coordinates = zip(*centroids.items())
+        centroid_indexes, centroid_coordinates = list(zip(*list(centroids.items())))
         optimal_grid_angle = Plate.grid_hough(points=centroid_coordinates)
         rotated_centroids = Plate.rotate_points(points=centroid_coordinates,
                                                 angle=-optimal_grid_angle)
-        rotated_centroids_h, rotated_centroids_w = zip(*rotated_centroids)
-        rotated_h_index = dict(zip(centroid_indexes, rotated_centroids_h))
-        rotated_w_index = dict(zip(centroid_indexes, rotated_centroids_w))
+        rotated_centroids_h, rotated_centroids_w = list(zip(*rotated_centroids))
+        rotated_h_index = dict(list(zip(centroid_indexes, rotated_centroids_h)))
+        rotated_w_index = dict(list(zip(centroid_indexes, rotated_centroids_w)))
         rotated_centroids_h = np.array(rotated_centroids_h).reshape(-1, 1)
         rotated_centroids_w = np.array(rotated_centroids_w).reshape(-1, 1)
         h_axis, w_axis = 0, 1
@@ -1959,7 +1959,7 @@ class Plate(object):
                     Plate.fit_predict_dict(kmeans_assignments=sorted_lane_list,
                                            points=centroid_indexes)
         grid_assignments = {}
-        for lane, lane_centroid_indexes in lane_assignments.iteritems():
+        for lane, lane_centroid_indexes in lane_assignments.items():
             if long_axis == h_axis:
                 lane_centroid_coordinates = [rotated_h_index[index]
                                             for index in lane_centroid_indexes]
@@ -2012,7 +2012,7 @@ class Plate(object):
             pixel_color = tuple(color_image[h, w].tolist())
             basin_pixels[Label].append(pixel_color)
         basin_pixels = {basin: tuple(pixels)
-                        for basin, pixels in basin_pixels.iteritems()}
+                        for basin, pixels in basin_pixels.items()}
         self.feature_stash[feature_out] = (color_space, basin_pixels)
         return None, self.feature_stash[feature_out]
 
@@ -2025,16 +2025,16 @@ class Plate(object):
         subsampled_basin_colors = {basin:
                                    sample(pixels, min(subsample, len(pixels)))
                                    for basin, pixels
-                                   in basin_colors.iteritems()}
-        xyzs = {basin: zip(*pixels)
+                                   in basin_colors.items()}
+        xyzs = {basin: list(zip(*pixels))
                 for basin, pixels
-                in subsampled_basin_colors.iteritems()}
+                in subsampled_basin_colors.items()}
         traces = [graph_objs.Scatter3d(x=x, y=y, z=z,
                                        mode='markers',
                                        marker=dict(size=5),
                                        name = str(basin),
                                       )
-                  for basin, (x, y, z) in xyzs.iteritems()]
+                  for basin, (x, y, z) in xyzs.items()]
         if color_space == 'rgb':
             x_title, y_title, z_title = 'R', 'G', 'B'
         elif color_space == 'lab':
@@ -2172,13 +2172,13 @@ class Plate(object):
                    for s, (cw1, cw2, (cx1, cy1), (cx2, cy2))
                    in enumerate(calibration_segments)
                   }
-        between_index = [s for s, b in between.iteritems() if b]
+        between_index = [s for s, b in between.items() if b]
         num_is_between = len(between_index)
         if num_is_between == 1:
             between_w1, between_w2 = calibration_segments[between_index[0]][:2]
         else:
             inverse_distance_map = defaultdict(list)
-            for (cw1, cw2), (e1, e2) in euclidean_distances.iteritems():
+            for (cw1, cw2), (e1, e2) in euclidean_distances.items():
                 inverse_distance_map[e1].append(cw1)
                 inverse_distance_map[e2].append(cw2)
             smallest_distance = min(inverse_distance_map)
@@ -2232,7 +2232,7 @@ class Plate(object):
                        in calibration_segments
                       }
         distances = {(cw1, cw2): euclidean(chromaticity, projected_point)
-                     for (cw1, cw2), projected_point in projections.iteritems()
+                     for (cw1, cw2), projected_point in projections.items()
                     }
         best_segment = min(distances, key=distances.get)
         best_projection = projections[best_segment]

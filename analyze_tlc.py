@@ -37,7 +37,7 @@ from skimage.segmentation import find_boundaries
 from skimage.util import invert
 
 #We use Tkinter for GUI
-import Tkinter as tk
+import tkinter as tk
 from PIL import Image, ImageTk
 
 # Import image analysis library
@@ -275,7 +275,7 @@ def make_pil_image(color_image,
         and assignment_feature in plate.feature_stash
        ):
         assignments = plate.feature_stash[assignment_feature]
-        for basin, base_assign_state in assignments.iteritems():
+        for basin, base_assign_state in assignments.items():
             isolated_basin = np.where(basins == basin,
                                       1,
                                       0,
@@ -382,9 +382,9 @@ def order_centroids(basin_centroids,
                                                   point=(h, w),
                                                   segment=((h1, w1), (h2, w2)),
                                                                           )
-                           for basin, (h, w) in basin_centroids.iteritems()
+                           for basin, (h, w) in basin_centroids.items()
                           }
-    basin_ordering = list(enumerate(sorted(projected_centroids.items(),
+    basin_ordering = list(enumerate(sorted(list(projected_centroids.items()),
                                            key=lambda x:x[1],
                                           ),
                                     start=1,
@@ -405,22 +405,22 @@ def on_save():
                                     line=solvent_front,
                                    )
     else:
-        basin_map = {basin: basin for basin in basin_centroids.iterkeys()}
+        basin_map = {basin: basin for basin in basin_centroids.keys()}
     basins = plate.feature_stash['iterated_basins']
     sorted_basins = np.zeros_like(basins)
-    for basin, sorted_basin in basin_map.iteritems():
+    for basin, sorted_basin in basin_map.items():
         sorted_basins = np.where(basins == basin,
                                  sorted_basin,
                                  sorted_basins,
                                 )
     plate.feature_stash['sorted_basins'] = sorted_basins
     sorted_centroids = {basin_map[basin]: centroid
-                        for basin, centroid in basin_centroids.iteritems()
+                        for basin, centroid in basin_centroids.items()
                        }
     plate.feature_stash['sorted_centroids'] = sorted_centroids
     epoch_hash = appaloosa.epoch_to_hash(time.time())
     output_basename = epoch_hash
-    print("Saving using basename " + str(output_basename))
+    print(("Saving using basename " + str(output_basename)))
     image_filename = output_basename + "_segmented.png"
     plate.display(tag_in='rescaled_image',
                   figsize=70,
@@ -445,15 +445,15 @@ def on_save():
     basin_intensities = plate.feature_stash['basin_intensities']
     indexed_basin_rfs = plate.feature_stash.get('indexed_basin_rfs', {})
     collated_basin_rfs = {}
-    for base_assign_state, rf_dict in indexed_basin_rfs.iteritems():
-        for basin, rf in rf_dict.iteritems():
+    for base_assign_state, rf_dict in indexed_basin_rfs.items():
+        for basin, rf in rf_dict.items():
             assert basin not in collated_basin_rfs
             collated_basin_rfs[basin] = (base_assign_state, rf)
     with open(csv_filename, 'w') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_header = ["Spot #", "Intensity", "Baseline #", "Rf"]
         csv_writer.writerow(csv_header)
-        for basin, sorted_basin in sorted(basin_map.iteritems(),
+        for basin, sorted_basin in sorted(iter(basin_map.items()),
                                           key=lambda x:x[1],
                                          ):
         #for basin, intensity in sorted(basin_intensities.iteritems(),
@@ -838,10 +838,10 @@ def assign(event):
         print("No baseline chosen for assignment; ignoring.")
         return
     if len(baselines) < base_assign_state:
-        print("baseline #"
+        print(("baseline #"
               + str(base_assign_state)
               + " not yet defined; ignoring."
-             )
+             ))
         return
     w, h = event.x, event.y
     mapped_w = int(round(float(w) / resize_ratio))
@@ -858,7 +858,7 @@ def assign(event):
     basin_centroids = plate.feature_stash['basin_centroids']
     filtered_basin_centroids = {Label: centroid
                                 for Label, centroid
-                                in basin_centroids.iteritems()
+                                in basin_centroids.items()
                                 if (Label in assignments
                                     and assignments[Label] == base_assign_state
                                    )
@@ -969,10 +969,10 @@ def circle_filter_all_button():
             per_basin_blobs[basin].append((h, w, r))
         largest_per_basin_blobs = {basin: max(blobs, key=lambda x:x[2])
                                    for basin, blobs
-                                   in per_basin_blobs.iteritems()
+                                   in per_basin_blobs.items()
                                   }
         circle_scaling = 1.5
-        for basin, (h, w, r) in largest_per_basin_blobs.iteritems():
+        for basin, (h, w, r) in largest_per_basin_blobs.items():
             boolean_circle_array = appaloosa.Plate.make_boolean_circle(
                            image=plate.image_stash['corrected_rescaled_image'],
                            h=h, w=w,
@@ -1000,7 +1000,7 @@ def circle_filter_all_button():
         raise NotImplementedError("Superseded by isolated_LoG_MP")
         stdout.write("Applying circle filter to all basins...")
         stdout.flush()
-        global plate, circle_filter_entry
+        # global plate, circle_filter_entry
         max_radius = int(circle_filter_entry.get())
         plate.image_stash['inverted_corrected_rescaled_image'] = \
                           invert(plate.image_stash['corrected_rescaled_image'])
@@ -1039,10 +1039,10 @@ def circle_filter_all_button():
         #             )
         largest_per_basin_blobs = {basin: max(blobs, key=lambda x:x[2])
                                    for basin, blobs
-                                   in per_basin_blobs.iteritems()
+                                   in per_basin_blobs.items()
                                   }
         circle_scaling = 1.5
-        for basin, (h, w, r) in largest_per_basin_blobs.iteritems():
+        for basin, (h, w, r) in largest_per_basin_blobs.items():
             boolean_circle_array = appaloosa.Plate.make_boolean_circle(
                            image=plate.image_stash['corrected_rescaled_image'],
                            h=h, w=w,
@@ -1055,7 +1055,7 @@ def circle_filter_all_button():
                                           )
             plate.feature_stash['iterated_basins'] = updated_basins
         remeasure_basins(plate)
-        global tk_image, canvas, pil_image, canvas_image, resize_ratio
+        # global tk_image, canvas, pil_image, canvas_image, resize_ratio
         color_image = plate.image_stash['rescaled_image']
         pil_image = make_pil_image(
                                  color_image=color_image,
@@ -1069,7 +1069,7 @@ def circle_filter_all_button():
     elif mode == 'isolated_LoG_MP':
         stdout.write("Applying circle filter to all basins...")
         stdout.flush()
-        global plate, circle_filter_entry
+        # global plate, circle_filter_entry
         max_radius = int(circle_filter_entry.get())
         plate.image_stash['inverted_corrected_rescaled_image'] = \
                           invert(plate.image_stash['corrected_rescaled_image'])
@@ -1126,7 +1126,7 @@ def circle_filter_all_button():
         #                        in per_basin_blobs.iteritems()
         #                       }
         best_per_basin_blobs = {}
-        for basin, blobs in per_basin_blobs.iteritems():
+        for basin, blobs in per_basin_blobs.items():
             best_h, best_w, best_r, best_value = None, None, None, None
             for blob in blobs:
                 h, w, r = blob
@@ -1151,7 +1151,7 @@ def circle_filter_all_button():
                                    )
         processes = []
         updated_basin_list = []
-        for basin, (h, w, r) in best_per_basin_blobs.iteritems():
+        for basin, (h, w, r) in best_per_basin_blobs.items():
             image = plate.image_stash['corrected_rescaled_image']
             radius = r
             process = pool.apply_async(make_boolean_circle,
@@ -1177,7 +1177,7 @@ def circle_filter_all_button():
                                      )
         plate.feature_stash['iterated_basins'] = updated_basins
         remeasure_basins(plate)
-        global tk_image, canvas, pil_image, canvas_image, resize_ratio
+        # global tk_image, canvas, pil_image, canvas_image, resize_ratio
         color_image = plate.image_stash['rescaled_image']
         pil_image = make_pil_image(
                                  color_image=color_image,
@@ -1192,7 +1192,7 @@ def circle_filter_all_button():
     elif mode == 'manual':
         stdout.write("Applying circle filter to all basins...")
         stdout.flush()
-        global plate, circle_filter_entry
+        # global plate, circle_filter_entry
         basins = plate.feature_stash['iterated_basins']
         image = plate.image_stash['corrected_rescaled_image']
         radius = int(circle_filter_entry.get())
@@ -1202,7 +1202,7 @@ def circle_filter_all_button():
                                           )
         plate.feature_stash['iterated_basins'] = updated_basins
         remeasure_basins(plate)
-        global tk_image, canvas, pil_image, canvas_image, resize_ratio
+        # global tk_image, canvas, pil_image, canvas_image, resize_ratio
         color_image = plate.image_stash['rescaled_image']
         pil_image = make_pil_image(
                                  color_image=color_image,
@@ -1218,7 +1218,7 @@ def circle_filter_all_button():
 
 def keyboard(event):
     char = event.char
-    global resize_ratio, plate, canvas
+    # global resize_ratio, plate, canvas
     w, h = event.x, event.y
     mapped_w = int(round(float(w) / resize_ratio))
     mapped_h = int(round(float(h) / resize_ratio))
@@ -1244,8 +1244,8 @@ def keyboard(event):
         indexed_basin_rfs = plate.feature_stash.get('indexed_basin_rfs', None)
         rf_text = ""
         if indexed_basin_rfs is not None:
-            for base_assign_state, basin_rfs in indexed_basin_rfs.iteritems():
-                for b, rf in basin_rfs.iteritems():
+            for base_assign_state, basin_rfs in indexed_basin_rfs.items():
+                for b, rf in basin_rfs.items():
                     if b == basin:
                         rf_text = "\nRf = " + str(round(rf, 2))
         basin_text += rf_text
@@ -1260,7 +1260,7 @@ def keyboard(event):
         stdout.write("Applying circle filter...")
         stdout.flush()
         mode = 'isolated_LoG'
-        global plate, circle_filter_entry
+        # global plate, circle_filter_entry
         if mode == 'isolated_LoG':
             max_radius = int(circle_filter_entry.get())
             plate.image_stash['inverted_corrected_rescaled_image'] = \
@@ -1327,7 +1327,7 @@ def keyboard(event):
         else:
             print("Unrecognized circle filter mode; ignoring.")
         remeasure_basins(plate)
-        global tk_image, canvas, pil_image, canvas_image, resize_ratio
+        # global tk_image, canvas, pil_image, canvas_image, resize_ratio
         color_image = plate.image_stash['rescaled_image']
         pil_image = make_pil_image(
                                  color_image=color_image,
@@ -1346,7 +1346,7 @@ def keyboard(event):
 canvas.bind('<Key>', keyboard)
 
 def add_basin():
-    global left_click_buffer, resize_ratio
+    # global left_click_buffer, resize_ratio
     if len(left_click_buffer) < 2:
         print("Insufficient points defined")
         return
@@ -1360,10 +1360,10 @@ def add_basin():
     center_h = float(mapped_h1 + mapped_h2) / 2
     center_w = float(mapped_w1 + mapped_w2) / 2
     radius = euclidean((mapped_w1, mapped_h1), (mapped_w2, mapped_h2)) / 2.0
-    global plate
+    # global plate
     basins = plate.feature_stash['iterated_basins']
     largest_basins_tag = np.amax(basins)
-    print("largest_basins_tag = " + str(largest_basins_tag))
+    print(("largest_basins_tag = " + str(largest_basins_tag)))
     new_basin_tag = largest_basins_tag + 1
     updated_basins = basins.copy()
     #min_h, max_h = min(mapped_h1, mapped_h2), max(mapped_h1, mapped_h2)
@@ -1436,7 +1436,7 @@ def post_front():
         return
     basin_centroids = plate.feature_stash['basin_centroids']
     to_delete = []
-    for basin, (ch, cw) in basin_centroids.iteritems():
+    for basin, (ch, cw) in basin_centroids.items():
         ich, icw = int(round(ch)), int(round(cw))
         if split_plate[ich, icw] == split_plate[mapped_h, mapped_w]:
             to_delete.append(basin)
