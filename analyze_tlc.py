@@ -353,15 +353,26 @@ pil_image = make_pil_image(color_image=color_image,
                            basins=plate.feature_stash['iterated_basins'],
                            resize_ratio=resize_ratio,
                           )
-tk_image = ImageTk.PhotoImage(master=root,
+frame = tk.Frame(root,width=500,height=500)
+frame.pack(expand=True, fill=tk.BOTH)
+tk_image = ImageTk.PhotoImage(master=frame,
                               image=pil_image,
                              )
 image_width, image_height = pil_image.size
-canvas = tk.Canvas(root,
-                   width=image_width,
-                   height=image_height,
+canvas = tk.Canvas(frame,
+                   width=500,
+                   height=500,
+                   scrollregion=(0,0,image_width,image_height)
                   )
-canvas.pack()
+hbar=tk.Scrollbar(frame,orient=tk.HORIZONTAL)
+hbar.pack(side=tk.BOTTOM,fill=tk.X)
+hbar.config(command=canvas.xview)
+vbar=tk.Scrollbar(frame,orient=tk.VERTICAL)
+vbar.pack(side=tk.RIGHT,fill=tk.Y)
+vbar.config(command=canvas.yview)
+canvas.config(width=500,height=500)
+canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+canvas.pack(side=tk.LEFT,expand=True,fill=tk.BOTH)
 canvas_image = canvas.create_image(0, 0,
                                    anchor='nw',
                                    image=tk_image,
@@ -509,8 +520,8 @@ left_click_shapes = []
 def right_click(event):
     stdout.write("Deleting spot...")
     stdout.flush()
-    w, h = event.x, event.y
     global plate, canvas, canvas_image, tk_image, pil_image, resize_ratio
+    w, h = canvas.canvasx(event.x), canvas.canvasy(event.y)
     basins = plate.feature_stash['iterated_basins']
     mapped_w = int(round(float(w) / resize_ratio))
     mapped_h = int(round(float(h) / resize_ratio))
@@ -581,7 +592,7 @@ linear_split_button = tk.Button(bottom_frame,
 linear_split_button.grid(column=3, row=2)
 
 def left_click(event):
-    w, h = event.x, event.y
+    w, h = canvas.canvasx(event.x), canvas.canvasy(event.y)
     global left_click_buffer, left_click_buffer_size, left_click_shapes
     left_click_buffer.append((w, h))
     left_click_buffer = left_click_buffer[-left_click_buffer_size:]
