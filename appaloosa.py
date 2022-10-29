@@ -99,12 +99,6 @@ class Plate(object):
         self.feature_stash = {}
         self.metadata = {'source_filename': source_filename}
 
-    def invert_image(self,
-                     tag_in,
-                     tag_out='inverted_image',
-                    ):
-        self.image_stash[tag_out] = invert(self.image_stash[tag_in])
-        return self.image_stash[tag_out], None
 
     def crop_to_plate(self,
                       tag_in,
@@ -217,33 +211,6 @@ class Plate(object):
             extended_line = ((left_width, left_height),
                              (right_width, right_height))
         return extended_line
-
-    def find_baseline(self,
-                      tag_in,
-                      feature_out='baseline',
-                     ):
-        g_img = rgb2gray(self.image_stash[tag_in])
-        height, width = g_img.shape
-        gg_img = gaussian(g_img, sigma=1)
-        sg_img = sobel(gg_img)
-        tsg_img = sg_img > threshold_otsu(sg_img)
-        lines = probabilistic_hough_line(tsg_img,
-                                         line_length=width * 0.60,
-                                         line_gap=width * 0.60 / 10.0)
-        #Select for lines that are approximately horizontal.
-        angle_filtered_lines = []
-        for line in lines:
-            (x1, y1), (x2, y2) = line
-            if x1 == x2:
-                continue
-            rads = atan2(abs(y1 - y2), abs(x1 - x2))
-            rads %= 2 * pi
-            degs = degrees(rads)
-            if -20 < degs < 20 or 160 < degs < 200:
-                angle_filtered_lines.append(line)
-        final_line = max(angle_filtered_lines, key=euclidean)
-        self.feature_stash[feature_out] = Plate.extend_line(final_line, g_img)
-        return None, self.feature_stash[feature_out]
 
     def baseline_orient(self,
                         tag_in,
@@ -450,13 +417,6 @@ class Plate(object):
         return lower_H, upper_H
 
     @staticmethod
-    def find_max_rp_coord(rp):
-        min_row, min_col, max_row, max_col = rp.bbox
-        hm, wm = np.unravel_index(np.argmax(rp.intensity_image),
-                                  rp.intensity_image.shape)
-        return min_row + hm, min_col + wm
-
-    @staticmethod
     def rp_intensity(rp,
                      background,
                      background_basins=None,
@@ -520,37 +480,6 @@ class Plate(object):
         next(b, None)
         return zip(a, b)
 
-    def find_notches(self,
-                     tag_in,
-                     feature_out='notches',
-                     baseline_feature='baseline',
-                     baseline_radius=20,
-                     sigma=10,
-                    ):
-        baseline = self.feature_stash[baseline_feature]
-        lower_H, upper_H = Plate.get_baseline_H_domain(baseline,
-                                                       baseline_radius)
-        g_img = rgb2gray(self.image_stash[tag_in])
-        baseline_slice = g_img[lower_H:upper_H,:]
-        col_sum = np.sum(baseline_slice, axis=0)
-        grs = gaussian_filter1d(col_sum, sigma=sigma)
-        peaks = find_peaks_cwt(np.amax(grs) - grs, np.arange(5, 30))
-        self.feature_stash[feature_out] = sorted(peaks)
-        return None, self.feature_stash[feature_out]
-
-    def lanes_from_notches(self,
-                           tag_in,
-                           notches_feature='notches',
-                           feature_out='lanes',
-                          ):
-        notches = self.feature_stash[notches_feature]
-        midpoints = [np.mean([n, notches[i]])
-                     for i, n in enumerate(notches[1:])]
-        image_width = self.image_stash[tag_in].shape[1]
-        lanes = [0] + midpoints + [image_width]
-        self.feature_stash[feature_out] = lanes
-        return None, self.feature_stash[feature_out]
-
     def find_basin_centroids(self,
                              tag_in,
                              basins_feature='basins',
@@ -564,27 +493,6 @@ class Plate(object):
                         )
         basin_centroids = {rp.label: rp.centroid for rp in RP}
         self.feature_stash[feature_out] = basin_centroids
-        return None, self.feature_stash[feature_out]
-
-    def lane_assign_basins(self,
-                           lanes_feature='lanes',
-                           basin_centroids_feature='basin_centroids',
-                           feature_out='lane_assignments',
-                          ):
-        lanes = self.feature_stash[lanes_feature]
-        if len(lanes) > len(ascii_lowercase):
-            raise NotImplementedError("Does not yet handle more lanes than "
-                                      "letters in the English alphabet.")
-        basin_centroids = self.feature_stash[basin_centroids_feature]
-        lane_assignments = {}
-        for Label, centroid in basin_centroids.items():
-            x, y = centroid
-            for i, (llane, rlane) in enumerate(Plate.pairwise(lanes)):
-                if llane <= y < rlane:
-                    lane_assignments[Label] = ascii_lowercase[i]
-            else:
-                lane_assignments[Label] = 'U'
-        self.feature_stash[feature_out] = lane_assignments
         return None, self.feature_stash[feature_out]
 
     def measure_basin_intensities(self,
@@ -625,28 +533,6 @@ class Plate(object):
                              for rp in RP}
         #TODO: Subtract notch intensities from blobs near baseline.
         self.feature_stash[feature_out] = basin_intensities
-        return None, self.feature_stash[feature_out]
-
-    def find_solvent_front(self,
-                           tag_in,
-                           sigma=4,
-                           feature_out='solvent_front',
-                          ):
-        g_img = rgb2gray(self.image_stash[tag_in])
-        g_img = g_img / np.amax(g_img)
-        scale = 100.0 / g_img.shape[0]
-        rg_img = rescale(g_img, scale=scale)
-        Hxx, Hxy, Hyy = hessian_matrix(rg_img, sigma=sigma)
-        row_mean = np.mean(Hyy, axis=1)
-        row_std = np.std(Hyy, axis=1)
-        row_sm = [float(x) / float(row_std[i]) for i, x in enumerate(row_mean)]
-        sf = np.argmax(row_sm)
-        if row_sm[sf] < 1:
-            sf = 0
-        else:
-            sf /= scale
-        solvent_front = sf
-        self.feature_stash[feature_out] = solvent_front
         return None, self.feature_stash[feature_out]
 
     @staticmethod
@@ -799,91 +685,6 @@ class Plate(object):
             open_closed_basins = np.where(open_closed, L, open_closed_basins)
         open_closed_basins = label(open_closed_basins)
         return open_closed_basins
-
-    @staticmethod
-    def erode_basins(basins,
-                     erosion_size=10,
-                     rectangular=False,
-                     exclude_label=None,
-                     exclude_labels=None,
-                    ):
-        """Excluded labels are set to 0."""
-        if exclude_labels is not None:
-            exclude_labels = set(exclude_labels)
-        else:
-            exclude_labels = set()
-        if exclude_label is not None:
-            exclude_labels.add(exclude_label)
-        eroded_basins = np.zeros_like(basins)
-        bT, bF = Plate.make_bT_bF(image=basins, dtype=np.bool)
-        if rectangular:
-            side_length = 2 * erosion_size + 1
-            erosion_element = rectangle(width=side_length, height=side_length)
-        else:
-            erosion_element = disk(erosion_size)
-        for L in np.unique(basins):
-            if L in exclude_labels:
-                continue
-            label_boolean = np.where(basins == L, bT, bF)
-            eroded = binary_erosion(image=label_boolean, selem=erosion_element)
-            eroded_basins = np.where(eroded, L, eroded_basins)
-        eroded_basins = label(eroded_basins)
-        return eroded_basins
-
-    @staticmethod
-    def dilate_basins(basins,
-                      dilation_size=10,
-                      rectangular=False,
-                      exclude_label=None,
-                      exclude_labels=None,
-                     ):
-        """Excluded labels are set to 0."""
-        if exclude_labels is not None:
-            exclude_labels = set(exclude_labels)
-        else:
-            exclude_labels = set()
-        if exclude_label is not None:
-            exclude_labels.add(exclude_label)
-        dilated_basins = np.zeros_like(basins)
-        bT, bF = Plate.make_bT_bF(image=basins, dtype=np.bool)
-        if rectangular:
-            side_length = 2 * dilation_size + 1
-            dilation_element = rectangle(width=side_length, height=side_length)
-        else:
-            dilation_element = disk(dilation_size)
-        for L in np.unique(basins):
-            if L in exclude_labels:
-                continue
-            label_boolean = np.where(basins == L, bT, bF)
-            dilated = binary_dilation(image=label_boolean,
-                                      selem=dilation_element)
-            dilated_basins = np.where(dilated, L, dilated_basins)
-        dilated_basins = label(dilated_basins)
-        return dilated_basins
-
-    @staticmethod
-    def skeletonize_basins(basins,
-                           exclude_label=None,
-                           exclude_labels=None,
-                          ):
-        if exclude_labels is not None:
-            exclude_labels = set(exclude_labels)
-        else:
-            exclude_labels = set()
-        if exclude_label is not None:
-            exclude_labels.add(exclude_label)
-        skeletonized_basins = np.zeros_like(basins)
-        for L in np.unique(basins):
-            if L in exclude_labels:
-                continue
-            label_boolean = np.where(basins == L, True, False)
-            skeletonized = skeletonize(image=label_boolean)
-            skeletonized_basins = np.where(skeletonized,
-                                           L,
-                                           skeletonized_basins,
-                                          )
-        skeletonized_basins = label(skeletonized_basins)
-        return skeletonized_basins
 
     @staticmethod
     def most_frequent_label(basins,
@@ -1249,45 +1050,6 @@ class Plate(object):
         self.feature_stash[feature_out] = overlaid_labels
         return None, self.feature_stash[feature_out]
 
-    def find_lines(self,
-                   tag_in,
-                   feature_out='lines',
-                   hough_threshold=10,
-                   smoothing_sigma=1,
-                   line_length_factor=0.60,
-                   line_gap_factor=0.1,
-                  ):
-        image = self.image_stash[tag_in]
-        g_img = rgb2gray(image)
-        height, width = g_img.shape
-        if smoothing_sigma > 0:
-            gg_img = gaussian(g_img, sigma=smoothing_sigma)
-        else:
-            gg_img = g_img.copy()
-        sg_img = sobel(gg_img)
-        tsg_img = sg_img > threshold_otsu(sg_img)
-        line_length = width * line_length_factor
-        line_gap = line_length * line_gap_factor
-        lines = probabilistic_hough_line(tsg_img,
-                                         threshold=hough_threshold,
-                                         line_length=line_length,
-                                         line_gap=line_gap,
-                                        )
-        self.feature_stash[feature_out] = lines
-        return None, self.feature_stash[feature_out]
-
-    def extend_lines(self,
-                     tag_in,
-                     lines_feature='lines',
-                     feature_out='extended_lines',
-                    ):
-        image = self.image_stash[tag_in]
-        lines = self.feature_stash[lines_feature]
-        extended_lines = [Plate.extend_line(line=line, image=image)
-                          for line in lines]
-        self.feature_stash[feature_out] = tuple(extended_lines)
-        return None, self.feature_stash[feature_out]
-
     @staticmethod
     def line_segments_angle(segment_A, segment_B):
         (xA1, yA1), (xA2, yA2) = segment_A
@@ -1343,64 +1105,6 @@ class Plate(object):
                 intersect = False
         return intersect
 
-    def bundle_lines(self,
-                     tag_in,
-                     lines_feature='extended_lines',
-                     feature_out='bundled_lines',
-                     merge_dilation=3,
-                     angle_tolerance=10,
-                     debug_display=False,
-                    ):
-        image = rgb2gray(self.image_stash[tag_in])
-        image_height, image_width = image.shape
-        lines = self.feature_stash[lines_feature]
-        line_angles = {line: Plate.standard_line_angle(line=line)
-                       for line in lines}
-        median_line_angle = np.median(list(line_angles.values()))
-        filtered_lines = [line for line, angle in line_angles.items()
-                          if abs(angle - median_line_angle) <= angle_tolerance]
-        lines_boolean = np.zeros_like(image, dtype=np.bool)
-        for line in filtered_lines:
-            (w1, h1), (w2, h2) = line
-            h1, w1 = int(round(h1)), int(round(w1))
-            h2, w2 = int(round(h2)), int(round(w2))
-            h1 = min(max(h1, 0), image_height - 1)
-            w1 = min(max(w1, 0), image_width - 1)
-            h2 = min(max(h2, 0), image_height - 1)
-            w2 = min(max(w2, 0), image_width - 1)
-            rr, cc = draw.line(h1, w1, h2, w2)
-            lines_boolean[rr, cc] = True
-        lines_boolean = binary_dilation(image=lines_boolean,
-                                        selem=disk(merge_dilation),
-                                       )
-        lines_boolean = skeletonize(lines_boolean)
-        lines_labels = label(lines_boolean)
-        if debug_display:
-            self.image_stash['debug_display'] = \
-                                      np.ones_like(image, dtype=np.uint8) * 250
-            self.feature_stash['debug_basins'] = lines_labels
-            self.display(tag_in='debug_display',
-                         basins_feature='debug_basins',
-                         figsize=10,
-                        )
-        coord_dict = defaultdict(list)
-        for (h, w), L in np.ndenumerate(lines_labels):
-            if L == 0:
-                continue
-            coord_dict[L].append((h, w))
-        distance_dict = {}
-        for L, coords in coord_dict.items():
-            distances = Plate.all_pairwise_distances(points=coords)
-            (p1, p2), largest_distance = max(list(distances.items()),
-                                             key=lambda x:x[1])
-            p1, p2 = p1[::-1], p2[::-1]
-            distance_dict[L] = (p1, p2, largest_distance)
-        bundled_lines = [Plate.extend_line(line=(p1, p2), image=image)
-                         for L, (p1, p2, largest_distance)
-                         in distance_dict.items()]
-        self.feature_stash[feature_out] = tuple(bundled_lines)
-        return None, self.feature_stash[feature_out]
-
     @staticmethod
     def point_line_distance(point, line):
         """
@@ -1418,38 +1122,6 @@ class Plate(object):
         numerator_vector = (a - p) - np.dot((a - p), u) * u
         numerator_norm = np.linalg.norm(numerator_vector)
         return float(numerator_norm)
-
-    def smooth_lines(self,
-                     tag_in,
-                     tag_out='smoothed_lines',
-                     lines_feature='lines',
-                     smooth_radius=3,
-                     debug_output=False,
-                    ):
-        image = self.image_stash[tag_in]
-        lines = self.feature_stash[lines_feature]
-        g_img = rgb2gray(image)
-        lines_boolean = np.zeros_like(g_img, dtype=np.bool)
-        for line in lines:
-            (w1, h1), (w2, h2) = (x1, y1), (x2, y2) = line
-            rr, cc = draw.line(h1, w1, h2, w2)
-            lines_boolean[rr, cc] = True
-        lines_boolean = binary_dilation(image=lines_boolean,
-                                        selem=disk(smooth_radius),
-                                       )
-        if debug_output:
-            print("lines boolean debug")
-            self.image_stash['debug_display'] = lines_boolean
-            self.display(tag_in='debug_display',
-                         figsize=10,
-                        )
-        smoothing_template = median_filter(g_img, size=smooth_radius)
-        smoothed_image = np.where(lines_boolean,
-                                  smoothing_template,
-                                  g_img,
-                                 )
-        self.image_stash[tag_out] = smoothed_image
-        return self.image_stash[tag_out], None
 
     def subdivide_basin(self,
                         tag_in,
@@ -1525,29 +1197,6 @@ class Plate(object):
                                  )
         self.feature_stash[feature_out] = updated_basins
 
-    def subdivide_basins(self,
-                         basins,
-                         target_basins,
-                         grayscale_image,
-                         smoothing_sigma=None,
-                         all_basins=True,
-                        ):
-        raise NotImplementedError("Pasted in from old code; not fully merged.")
-        subdivided_labels = [subdivide_basin(basins=basins,
-                                             target_basin=basin,
-                                             grayscale_image=grayscale_image,
-                                             smoothing_sigma=None,
-                                            )
-                             for basin in iter(target_basins)]
-        if all_basins:
-            for basin in iter(target_basins):
-                basins = np.where(basins == basin, 0, basins)
-        else:
-            basins = np.zeros_like(basins)
-        for labels in subdivided_labels:
-            basins += labels
-        return basins
-                                                                                                                        
     @staticmethod
     def points_colinear(points, error_tolerance=10**-5):
         points = sorted(points, key=lambda x:x[0])
@@ -1663,46 +1312,6 @@ class Plate(object):
         rotated_points = [tuple(np.dot(rotation_matrix, np.array(point)))
                           for point in points]
         return tuple(rotated_points)
-
-    def remove_background_basins(self,
-                                 tag_in,
-                                 basins_feature='waterfall_basins',
-                                 feature_out='strongest_basins',
-                                 z=2,
-                                 open_close_size=10,
-                                 debug_output=False,
-                                ):
-        g_img = rgb2gray(self.image_stash[tag_in])
-        basins = self.feature_stash[basins_feature]
-        if g_img.shape != basins.shape:
-            raise ValueError((g_img.shape, basins.shape))
-        (most_frequent_label,
-         background_pixel_coordinates,
-         background_pixel_values,
-        ) = Plate.most_frequent_label(basins=basins, image=g_img)
-        background_mu = np.mean(background_pixel_values)
-        background_sigma = np.std(background_pixel_values)
-        background_threshold = background_mu - background_sigma * z
-        bT, bF = Plate.make_bT_bF(image=g_img)
-        foreground_bool = np.where(basins != most_frequent_label, bT, bF)
-        if debug_output:
-            print("foreground_bool debug")
-            self.image_stash['debug_display'] = g_img
-            self.feature_stash['debug_basins'] = foreground_bool
-            self.display(tag_in='debug_display',
-                         basins_feature='debug_basins',
-                         figsize=10,
-                         display_labels=True,
-                        )
-        remove_bool = np.where(g_img > background_threshold, bT, bF)
-        remaining_bool = foreground_bool * ~remove_bool
-        closed_opened_bool = Plate.open_close_boolean_basins(
-                                               boolean_basins=remaining_bool,
-                                               open_close_size=open_close_size,
-                                                            )
-        strongest_basins = label(closed_opened_bool)
-        self.feature_stash[feature_out] = strongest_basins
-        return None, self.feature_stash[feature_out]
 
     @staticmethod
     def bounding_hypercube(points):
@@ -1916,67 +1525,6 @@ class Plate(object):
             sort_mapping = {v: k for k, v in sort_mapping.items()}
         return sort_mapping
 
-    def assign_grid(self,
-                    centroids_feature='basin_centroids',
-                    feature_out='grid_assignments',
-                    **kwargs
-                   ):
-        centroids = self.feature_stash[centroids_feature]
-        centroid_indexes, centroid_coordinates = list(zip(*list(centroids.items())))
-        optimal_grid_angle = Plate.grid_hough(points=centroid_coordinates)
-        rotated_centroids = Plate.rotate_points(points=centroid_coordinates,
-                                                angle=-optimal_grid_angle)
-        rotated_centroids_h, rotated_centroids_w = list(zip(*rotated_centroids))
-        rotated_h_index = dict(list(zip(centroid_indexes, rotated_centroids_h)))
-        rotated_w_index = dict(list(zip(centroid_indexes, rotated_centroids_w)))
-        rotated_centroids_h = np.array(rotated_centroids_h).reshape(-1, 1)
-        rotated_centroids_w = np.array(rotated_centroids_w).reshape(-1, 1)
-        h_axis, w_axis = 0, 1
-        h_num_k = Plate.determine_k(points=rotated_centroids_h,
-                                    max_k=None,
-                                    method='jenks',
-                                    **kwargs
-                                   )
-        w_num_k = Plate.determine_k(points=rotated_centroids_w,
-                                    max_k=None,
-                                    method='jenks',
-                                    **kwargs
-                                   )
-        long_axis = h_axis if h_num_k > w_num_k else w_axis
-        num_lanes = min(h_num_k, w_num_k)
-        km_lanes = KMeans(n_clusters=num_lanes)
-        if long_axis == h_axis:
-            to_fit_centroids = rotated_centroids_w
-        else:
-            to_fit_centroids = rotated_centroids_h
-        lane_list = km_lanes.fit_predict(to_fit_centroids)
-        lane_coordinates = tuple(km_lanes.cluster_centers_.tolist())
-        lane_sort_mapping = Plate.map_sort(items=lane_coordinates,
-                                           reverse=False)
-        sorted_lane_list = tuple([lane_sort_mapping[lane]
-                                  for lane in lane_list])
-        lane_assignments = \
-                    Plate.fit_predict_dict(kmeans_assignments=sorted_lane_list,
-                                           points=centroid_indexes)
-        grid_assignments = {}
-        for lane, lane_centroid_indexes in lane_assignments.items():
-            if long_axis == h_axis:
-                lane_centroid_coordinates = [rotated_h_index[index]
-                                            for index in lane_centroid_indexes]
-            else:
-                lane_centroid_coordinates = [rotated_w_index[index]
-                                            for index in lane_centroid_indexes]
-            sort_mapping = Plate.map_sort(items=lane_centroid_coordinates,
-                                          reverse=False,
-                                          inverse=True,
-                                         )
-            sorted_indexes = tuple([lane_centroid_indexes[sort_mapping[i]]
-                                    for i, index
-                                    in enumerate(lane_centroid_indexes)])
-            grid_assignments[lane] = sorted_indexes
-        self.feature_stash[feature_out] = grid_assignments
-        return None, self.feature_stash[feature_out]
-
     @staticmethod
     def XYZ2xyY(image):
         X, Y, Z = image[..., 0], image[..., 1], image[..., 2]
@@ -2015,51 +1563,6 @@ class Plate(object):
                         for basin, pixels in basin_pixels.items()}
         self.feature_stash[feature_out] = (color_space, basin_pixels)
         return None, self.feature_stash[feature_out]
-
-    def display_colors_3D(self,
-                          basin_colors_feature='basin_colors',
-                          subsample=20,
-                          height=1000,
-                         ):
-        color_space, basin_colors = self.feature_stash[basin_colors_feature]
-        subsampled_basin_colors = {basin:
-                                   sample(pixels, min(subsample, len(pixels)))
-                                   for basin, pixels
-                                   in basin_colors.items()}
-        xyzs = {basin: list(zip(*pixels))
-                for basin, pixels
-                in subsampled_basin_colors.items()}
-        traces = [graph_objs.Scatter3d(x=x, y=y, z=z,
-                                       mode='markers',
-                                       marker=dict(size=5),
-                                       name = str(basin),
-                                      )
-                  for basin, (x, y, z) in xyzs.items()]
-        if color_space == 'rgb':
-            x_title, y_title, z_title = 'R', 'G', 'B'
-        elif color_space == 'lab':
-            x_title, y_title, z_title = 'L', 'a', 'b'
-        elif color_space == 'hsv':
-            x_title, y_title, z_title = 'H', 'S', 'V'
-        elif color_space == 'XYZ':
-            x_title, y_title, z_title = 'X', 'Y', 'Z'
-        elif color_space == 'xyY':
-            x_title, y_title, z_title = 'x', 'y', 'Y'
-        elif color_space == 'luv':
-            x_title, y_title, z_title = 'L', 'u', 'v'
-        else:
-            raise ValueError("Invalid color space.")
-        scene=graph_objs.Scene(xaxis=graph_objs.XAxis(title=x_title),
-                               yaxis=graph_objs.YAxis(title=y_title),
-                               zaxis=graph_objs.ZAxis(title=z_title),
-                              )
-        layout = graph_objs.Layout(plot_bgcolor='rgba(0,0,0,0)',
-                                   paper_bgcolor='rgba(0,0,0,0)',
-                                   scene=scene,
-                                   height=height,
-                                  )
-        fig = graph_objs.Figure(data=traces, layout=layout)
-        iplot(fig)
 
     @staticmethod
     def nn_cluster_distance(cluster_A,
@@ -2205,13 +1708,6 @@ class Plate(object):
         return norm(np.cross(p2 - p1, p1 - point))/norm(p2 - p1)
 
     @staticmethod
-    def point_line_segment_distance(point, line_segment):
-        pL = Plate.point_line_distance_v2(point=point, line=line_segment)
-        p1, p2 = line_segment
-        p1d, p2d = euclidean(point, p1), euclidean(point, p2)
-        return min(p1d, p2d, pL)
-
-    @staticmethod
     def project_point_on_segment(point,
                                  segment,
                                 ):
@@ -2219,31 +1715,6 @@ class Plate(object):
         segment = shapely.geometry.LineString(segment)
         np = segment.interpolate(segment.project(point))
         return np.x, np.y
-
-    @staticmethod
-    def fit_segments_v2(chromaticity,
-                        calibration_segments,
-                       ):
-        projections = {(cw1, cw2): Plate.project_point_on_segment(
-                                              point=chromaticity,
-                                              segment=((cx1, cy1), (cx2, cy2)),
-                                                                 )
-                       for cw1, cw2, (cx1, cy1), (cx2, cy2)
-                       in calibration_segments
-                      }
-        distances = {(cw1, cw2): euclidean(chromaticity, projected_point)
-                     for (cw1, cw2), projected_point in projections.items()
-                    }
-        best_segment = min(distances, key=distances.get)
-        best_projection = projections[best_segment]
-        segment_coordinates = {(cw1, cw2): ((cx1, cy1), (cx2, cy2))
-                               for cw1, cw2, (cx1, cy1), (cx2, cy2)
-                               in calibration_segments
-                              }
-        left_coords, right_coords = segment_coordinates[best_segment]
-        left_distance = euclidean(best_projection, left_coords)
-        right_distance = euclidean(best_projection, right_coords)
-        return best_projection, best_segment, left_distance, right_distance
 
     @staticmethod
     def make_boolean_circle(image,
