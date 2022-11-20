@@ -4,4 +4,7 @@ scikit-image<0.16
 scikit-learn<0.25
 scipy<0.20
 Shapely==1.8.4
+streamlit==1.10
+streamlit-drawable-canvas==0.9.2
+future-breakpoint
 
